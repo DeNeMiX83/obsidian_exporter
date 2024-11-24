@@ -1,0 +1,5 @@
+---
+parseFilePath: "go GC Garbage Collector"
+blackList: ["go"]
+filesPaths: ["/Users/mihey/backup/obsidian/На обработке", "/Users/mihey/backup/obsidian/База знаний"]
+mediaPath: "/Users/mihey/backup/obsidian/sources"
