@@ -19,7 +19,7 @@ import (
 
 type Config struct {
 	ParseFilePath string   `yaml:"parseFilePath"`
-	BlackList []string `yaml:"blackList"`	
+	BlackList     []string `yaml:"blackList"`
 	FilesPaths    []string `yaml:"filesPaths"`
 	MediaPath     string   `yaml:"mediaPath"`
 	LevelNesting  int      `yaml:"levelNesting"`
@@ -53,7 +53,6 @@ func main() {
 	cmd.PersistentFlags().String("config", "", "--config <path to config>")
 	root.AddCommand(cmd)
 
-	// Выполняем команду root
 	if err := root.Execute(); err != nil {
 		log.Fatal(err)
 	}
@@ -69,10 +68,10 @@ func run(cmd *cobra.Command, _ []string) {
 	if err := os.MkdirAll("выгрузка/вложенные файлы", os.ModePerm); err != nil {
 		fmt.Sprintln("ошибка создания директории: %w", err)
 	}
-	parseFile(cfg.ParseFilePath, cfg, map[string]struct{}{})
+	parseFileBFS(cfg.ParseFilePath, cfg)
 
-	sourceFolder := "выгрузка"       // Замените на путь к папке, которую хотите архивировать
-	destinationZip := "выгрузка.zip" // Имя создаваемого архива
+	sourceFolder := "выгрузка"
+	destinationZip := "выгрузка.zip"
 
 	err = ZipFolder(sourceFolder, destinationZip)
 	if err != nil {
@@ -88,67 +87,82 @@ func run(cmd *cobra.Command, _ []string) {
 	log.Println("Папка успешно удалена:")
 }
 
-func parseFile(filename string, cfg Config, parsedFiles map[string]struct{}) {
-	if slices.Contains(cfg.BlackList, filename) {
-		return
-	} 
-	if _, found := parsedFiles[filename]; found {
-		return
-	}
-	parsedFiles[filename] = struct{}{}
-	var filePath string
-	for _, sourceDir := range cfg.FilesPaths {
-		var err error
-		filePath, err = getFilePathByName(sourceDir, filename)
-		if err != nil {
-			fmt.Println("Ошибка при поиске пути файла", err)
+func parseFileBFS(filename string, cfg Config) {
+	queue := []struct {
+		file  string
+		level int
+	}{{filename, 1}}
+	parsedFiles := map[string]struct{}{}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		if current.level > cfg.LevelNesting {
+			continue
 		}
-		if filePath != "" {
-			destPath := filepath.Join("выгрузка/вложенные файлы", filename+".md")
-			if err := copyFile(filePath, destPath); err != nil {
-				fmt.Sprintln("ошибка копирования файла %s: %w", filePath, err)
+		fmt.Println(current.file, current.level)
+
+		if slices.Contains(cfg.BlackList, current.file) {
+			continue
+		}
+		if _, found := parsedFiles[current.file]; found {
+			continue
+		}
+		parsedFiles[current.file] = struct{}{}
+
+		var filePath string
+		for _, sourceDir := range cfg.FilesPaths {
+			var err error
+			filePath, err = getFilePathByName(sourceDir, current.file)
+			if err != nil {
+				fmt.Println("Ошибка при поиске пути файла", err)
 			}
-			break
+			if filePath != "" {
+				destPath := filepath.Join("выгрузка/вложенные файлы", current.file+".md")
+				if err := copyFile(filePath, destPath); err != nil {
+					fmt.Sprintln("ошибка копирования файла %s: %w", filePath, err)
+				}
+				break
+			}
+		}
+		if filePath == "" {
+			fmt.Printf("Файл %s не найден\n", current.file)
+			continue
+		}
+
+		file, err := os.Open(filePath)
+		if err != nil {
+			fmt.Println("Ошибка открытия файла:", err)
+			continue
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		var filesMatches []string
+		var mediaMatches []string
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			filesMatches = append(filesMatches, nestingFiles(line)...)
+			mediaMatches = append(mediaMatches, nestingMedia(line)...)
+		}
+
+		if err := scanner.Err(); err != nil {
+			fmt.Println("Ошибка чтения файла:", err)
+		}
+
+		if err := copyMatchingFiles(cfg.MediaPath, "выгрузка/вложенные медиа", mediaMatches); err != nil {
+			log.Printf("Ошибка при копировании медиафайлов из %s: %v\n", cfg.MediaPath, err)
+		}
+
+		for _, match := range filesMatches {
+			queue = append(queue, struct {
+				file  string
+				level int
+			}{match, current.level + 1})
 		}
 	}
-	if filePath == "" {
-		fmt.Printf("Файл %s не найден\n", filename)
-		return
-	}
-
-	// Обработка ParseFilePath
-	file, err := os.Open(filePath)
-	if err != nil {
-		fmt.Println("Ошибка открытия файла:", err)
-		return
-	}
-	defer file.Close()
-
-	var filesMatches []string
-	var mediaMatches []string
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		filesMatches = append(filesMatches, nestingFiles(line)...)
-
-		mediaMatches = append(mediaMatches, nestingMedia(line)...)
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Println("Ошибка чтения файла:", err)
-	}
-
-	// Копируем только те медиафайлы из каждой директории в FilesPaths, которые совпадают с mediaMatches
-	if err := copyMatchingFiles(cfg.MediaPath, "выгрузка/вложенные медиа", mediaMatches); err != nil {
-		log.Printf("Ошибка при копировании медиафайлов из %s: %v\n", cfg.MediaPath, err)
-	}
-
-	for _, match := range filesMatches {
-		parseFile(match, cfg, parsedFiles)
-	}
-
 }
 
 // Функция для копирования только тех файлов из sourceDir, которые совпадают с элементами из matches

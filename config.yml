@@ -1,5 +1,6 @@
 ---
-parseFilePath: "go GC Garbage Collector"
-blackList: ["go"]
-filesPaths: ["/Users/mihey/backup/obsidian/На обработке", "/Users/mihey/backup/obsidian/База знаний"]
-mediaPath: "/Users/mihey/backup/obsidian/sources"
+parseFilePath: "Устройство компьютера" # с какой заметки начать выгрузку
+blackList: []  # название заметок, которые не надо выгружать
+levelNesting: 3  # уровень вложенности заметок, до которого надо парсить
+filesPaths: ["/Users/mihey/backup/obsidian/На обработке", "/Users/mihey/backup/obsidian/База знаний"] # по каким путям лежат заметки
+mediaPath: "/Users/mihey/backup/obsidian/sources" # по каким путям лежат какие-либо медиа
