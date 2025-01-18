@@ -101,7 +101,6 @@ func parseFileBFS(filename string, cfg Config) {
 		if current.level > cfg.LevelNesting {
 			continue
 		}
-		fmt.Println(current.file, current.level)
 
 		if slices.Contains(cfg.BlackList, current.file) {
 			continue
